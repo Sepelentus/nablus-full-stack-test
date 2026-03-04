@@ -61,10 +61,6 @@ export default function Page() {
   }, [url]);
 
   async function pay(id: string) {
-    // TODO (candidato):
-    // - POST /api/orders/:id/pay
-    // - manejar error (mostrarlo arriba)
-    // - refrescar (load) si ok
     setError(null);
     try {
       const r = await fetch(`/api/orders/${encodeURIComponent(id)}/pay`, {
