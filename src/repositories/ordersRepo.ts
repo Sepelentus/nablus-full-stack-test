@@ -33,32 +33,73 @@ export type OrdersResponse = {
 };
 
 export async function listOrders(_q: OrdersQuery): Promise<OrdersResponse> {
-  // TODO (candidato):
-  // 1) Obtener data desde getOrdersDb()
-  // 2) Aplicar filtros:
-  //    - status (si != 'all')
-  //    - q: buscar en id/customerName/customerRut (case-insensitive)
-  //    - from/to: issuedAt inclusivo (YYYY-MM-DD)
-  // 3) Mapear a OrderRow calculando vat/total con calcTotals()
-  // 4) Ordenar por issuedAt o total + dir asc/desc
-  // 5) Armar summary:
-  //    - count
-  //    - totalNet, totalVat, totalGross
-  //    - byStatus: conteo por cada estado
+  const db = getOrdersDb();
+  const q = _q || {};
+
+  const filtered = db.filter((order) => {
+    if (q.status && q.status !== "all" && order.status !== q.status) return false;
+
+    if (q.q) {
+      const term = q.q.toLowerCase();
+      const match =
+        order.id.toLowerCase().includes(term) ||
+        order.customerName.toLowerCase().includes(term) ||
+        order.customerRut.toLowerCase().includes(term);
+      if (!match) return false;
+    }
+
+    if (q.from && order.issuedAt < q.from) return false;
+    if (q.to && order.issuedAt > q.to) return false;
+
+    return true;
+  });
+
+  const rows: OrderRow[] = filtered.map((order) => {
+    const { vat, total } = calcTotals(order);
+    return {
+      id: order.id,
+      customerName: order.customerName,
+      customerRut: order.customerRut,
+      issuedAt: order.issuedAt,
+      net: order.net,
+      vat,
+      total,
+      status: order.status,
+    };
+  });
+
+  const sortField = q.sort ?? "issuedAt";
+  const sortDir = q.dir ?? "desc";
+
+  rows.sort((a, b) => {
+    const cmp =
+      sortField === "total"
+        ? a.total - b.total
+        : a.issuedAt < b.issuedAt ? -1 : a.issuedAt > b.issuedAt ? 1 : 0;
+    return sortDir === "asc" ? cmp : -cmp;
+  });
+
+  const byStatus: Record<"pending" | "paid" | "canceled", number> = {
+    pending: 0,
+    paid: 0,
+    canceled: 0,
+  };
+  let totalNet = 0;
+  let totalVat = 0;
+  let totalGross = 0;
+
+  for (const row of rows) {
+    byStatus[row.status]++;
+    totalNet += row.net;
+    totalVat += row.vat;
+    totalGross += row.total;
+  }
 
   return {
-    data: [],
-    summary: {
-      count: 0,
-      totalNet: 0,
-      totalVat: 0,
-      totalGross: 0,
-      byStatus: { pending: 0, paid: 0, canceled: 0 },
-    },
+    data: rows,
+    summary: { count: rows.length, totalNet, totalVat, totalGross, byStatus },
   };
 }
-
-
 
 export async function payOrder(
   id: string

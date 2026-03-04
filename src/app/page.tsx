@@ -65,6 +65,19 @@ export default function Page() {
     // - POST /api/orders/:id/pay
     // - manejar error (mostrarlo arriba)
     // - refrescar (load) si ok
+    setError(null);
+    try {
+      const r = await fetch(`/api/orders/${encodeURIComponent(id)}/pay`, {
+        method: "POST",
+      });
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j?.error ?? `HTTP ${r.status}`);
+      }
+      await load();
+    } catch (e: any) {
+      setError(e?.message ?? "Error al pagar");
+    }
   }
 
   return (
